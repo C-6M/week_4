@@ -99,6 +99,57 @@ def delete_chunk(chunks, index, idx):
 # 列出所有段落
 def list_chunks(chunks):
     return chunks
+# 自动摘要：提取每篇笔记最核心的一句话
+def summarize_chunk(chunk, max_len=80):
+    sentences = chunk.replace('\n', ' ').split('。')
+    sentences = [s.strip() + '。' for s in sentences if s.strip()]
+    if not sentences:
+        return chunk[:max_len] + '...'
+    if len(sentences) == 1:
+        return sentences[0][:max_len] + ('...' if len(sentences[0]) > max_len else '')
+
+    # 分词统计关键词权重
+    words = [w for w in jieba.lcut(chunk) if len(w) >= 2 and w not in STOP_WORDS]
+    word_weight = Counter(words)
+
+    # 给每个句子打分（关键词权重之和）
+    best_sentence = ''
+    best_score = 0
+    for sent in sentences:
+        sent_words = [w for w in jieba.lcut(sent) if len(w) >= 2 and w not in STOP_WORDS]
+        score = sum(word_weight.get(w, 0) for w in sent_words)
+        if score > best_score:
+            best_score = score
+            best_sentence = sent
+
+    result = best_sentence if best_sentence else sentences[0]
+    return result[:max_len] + ('...' if len(result) > max_len else '')
+
+def handle_summarize(chunks, index, idx_str):
+    if not chunks:
+        print("暂无笔记，请先用 add 导入")
+        return chunks, index
+
+    if idx_str.strip() == '':
+        # 全部段落
+        print(f"\n📝 全部笔记摘要（共 {len(chunks)} 段）：\n")
+        for i, chunk in enumerate(chunks):
+            summary = summarize_chunk(chunk)
+            print(f"  [{i}] {summary}")
+    else:
+        try:
+            idx = int(idx_str.strip())
+            if idx < 0 or idx >= len(chunks):
+                print(f"无效的段落编号：{idx}")
+                return chunks, index
+            summary = summarize_chunk(chunks[idx])
+            print(f"\n📝 段落 [{idx}] 摘要：")
+            print(f"  原文：{chunks[idx][:80]}...")
+            print(f"  摘要：{summary}")
+        except ValueError:
+            print("用法：summarize 或 summarize <编号>")
+    return chunks, index
+
 #工具处理函数
 def handle_help(chunks, index,arg):
     print("\n可用命令：")
@@ -191,6 +242,11 @@ TOOLS = {
         "handler":  handle_delete,
         "keywords": ["删除", "移除", "去掉", "delete", "remove"],
         "usage":    "delete <编号>",
+    },
+    "summarize": {
+        "handler":  handle_summarize,
+        "keywords": ["摘要", "总结", "概要", "summarize", "summary"],
+        "usage":    "summarize [编号]",
     },
 }
 #命令解析
